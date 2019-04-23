@@ -245,7 +245,7 @@ func PatchDockerImage(originalIdentifier string, patchFile io.ReadCloser, target
 	}
 	for _, img := range postLoadImages {
 		if strings.HasPrefix(strings.Split(img.ID, ":")[1], targetIdentifier) {
-			logrus.Infoln("Patch was successful. %s is now available.", targetIdentifier)
+			logrus.Infof("Patch was successful. %s is now available.", targetIdentifier)
 			return nil
 		}
 	}

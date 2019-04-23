@@ -1,7 +1,7 @@
 # docker-patcher
 `docker-patcher` provides a cli & API to calculate and apply binary diffs against Docker images. Diffing is done using `bsdiff`/`bspatch`, wrapped nicely by [@icedream/go-bsdiff](https://github.com/icedream/go-bsdiff).
 
-While binary patching might be particularly useful in traditional datacenter/server environments, it can be very beneficial for devices with limited internet connectivity (e.g. IoT/M2M).
+While binary patching might not be particularly useful in traditional datacenter/server environments, it can be very beneficial for devices with limited internet connectivity (e.g. IoT/M2M).
 
 # Usage
 ### Create a patch
@@ -73,5 +73,5 @@ $ docker run --rm -d \
 ```
 The above command should have printed (among other things!) `Server: nginx/1.15.12`, indicating success!
 
-# Something is broken/could be better/etc
+# Something is broken/could be better/etc...
 Please feel free to open PRs, Issues, or send me an email!

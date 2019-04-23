@@ -25,9 +25,12 @@ func NewDefaultAPIClient() (*APIClient, error) {
 	}, nil
 }
 
-func ShortenLongID(longID string) string {
-	parts := strings.Split(longID, ":")
-	return parts[1][0:12]
+func ShortenLongID(identifier string) string {
+	if len(identifier) > 12 && strings.Contains(identifier, ":") {
+		parts := strings.Split(identifier, ":")
+		return parts[1][0:12]
+	}
+	return identifier
 }
 
 func (a *APIClient) ListImages(ctx context.Context) ([]types.ImageSummary, error) {

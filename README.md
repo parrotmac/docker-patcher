@@ -4,6 +4,25 @@
 While binary patching might not be particularly useful in traditional datacenter/server environments, it can be very beneficial for devices with limited internet connectivity (e.g. IoT/M2M).
 
 # Usage
+
+### Setup
+**With make**
+```base
+$ make
+```
+
+**Without make**
+```base
+$ dep ensure
+$ go build -o bin/dipatch cmd/create-docker-patch/main.go
+$ go build -o bin/didiff cmd/apply-docker-patch/main.go
+```
+
+Extra: temporarily add these tools to your path
+```bash
+$ export PATH=$PATH:`pwd`/bin
+```
+
 ### Create a patch
 ```bash
 didiff sha256:original_docker_image sha256:new_docker_image /path/to/diff.patch

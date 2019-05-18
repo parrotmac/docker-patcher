@@ -12,5 +12,5 @@ dipatch:
 	go build -o bin/dipatch cmd/create-docker-patch/main.go
 
 didiff:
-	go build -o bin/dipatch cmd/apply-docker-patch/main.go
+	go build -o bin/didiff cmd/apply-docker-patch/main.go
 

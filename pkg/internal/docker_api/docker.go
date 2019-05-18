@@ -16,7 +16,7 @@ type APIClient struct {
 }
 
 func NewDefaultAPIClient() (*APIClient, error) {
-	cx, err := client.NewClientWithOpts(client.FromEnv, client.WithVersion("1.39"))
+	cx, err := client.NewEnvClient()
 	if err != nil {
 		return nil, err
 	}

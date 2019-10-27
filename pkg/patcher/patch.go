@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/parrotmac/docker-patcher/pkg/internal/utils"
 	"io"
 	"io/ioutil"
 	"log"
@@ -15,6 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/parrotmac/docker-patcher/pkg/internal/docker_api"
+	"github.com/parrotmac/docker-patcher/pkg/internal/utils"
 )
 
 /*
@@ -36,6 +36,10 @@ func CreatePatch(fromID string, toID string, patchFile io.Writer) error {
 	newImgAvailable := false
 
 	images, err := dockerClient.ListImages(ctx)
+	if err != nil {
+		return err
+	}
+
 	for _, img := range images {
 		if img.ID == fromID {
 			oldImgAvailable = true

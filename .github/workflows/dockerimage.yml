@@ -18,4 +18,11 @@ jobs:
         username: parrotmac
         password: ${{ secrets.PACKAGE_REGISTRY_PASSWORD }}
         registry: docker.pkg.github.com
+    - name: Publish to Docker Hub
+      uses: elgohr/Publish-Docker-Github-Action@master
+      with:
+        name: isaacp/didiff
+        username: isaacp
+        password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+        registry: registry.hub.docker.com
 

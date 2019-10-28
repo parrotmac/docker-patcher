@@ -2,95 +2,70 @@ package patcher
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/icedream/go-bsdiff"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 
-	"github.com/parrotmac/docker-patcher/pkg/internal/docker_api"
-	"github.com/parrotmac/docker-patcher/pkg/internal/utils"
+	"github.com/parrotmac/docker-patcher/pkg/dockerutils"
 )
+
+type Config struct {
+	Logger           *zap.Logger
+	TempFileLocation string
+	DockerWrapper    *dockerutils.Wrapper
+}
+
+type Client struct {
+	logger *zap.Logger
+	tempFileLocation string
+	dockerClient *dockerutils.Wrapper
+}
+
+func NewClient(config *Config) (*Client, error) {
+	return &Client{
+		logger:           config.Logger.Named("patcher"),
+		tempFileLocation: config.TempFileLocation,
+		dockerClient: config.DockerWrapper,
+	}, nil
+}
 
 /*
 Given 'old' and 'new' image references (ID + Name:Tag), writes a patch file
-TODO(isaac) Dedupe from/to (old/new) logic
 */
-func CreatePatch(fromID string, toID string, patchFile io.Writer) error {
-	if docker_api.ShortenLongID(fromID) == docker_api.ShortenLongID(toID) {
-		return errors.New("IDs cannot be the same")
-	}
-
+func (c *Client) CreatePatch(fromID string, toID string, patchFile io.Writer) error {
 	ctx := context.TODO()
-	dockerClient, err := docker_api.NewDefaultAPIClient()
+
+	fromImg, err := c.dockerClient.LookupImage(ctx, fromID)
 	if err != nil {
 		return err
 	}
 
-	oldImgAvailable := false
-	newImgAvailable := false
-
-	images, err := dockerClient.ListImages(ctx)
+	toImg, err := c.dockerClient.LookupImage(ctx, toID)
 	if err != nil {
 		return err
-	}
-
-	for _, img := range images {
-		if img.ID == fromID {
-			oldImgAvailable = true
-		}
-		if img.ID == toID {
-			newImgAvailable = true
-		}
-	}
-
-	if !oldImgAvailable {
-		return fmt.Errorf("image with reference '%s' in not availalbe (it may need to be pulled)", fromID)
-	}
-
-	if !newImgAvailable {
-		return fmt.Errorf("image with reference '%s' in not availalbe (it may need to be pulled)", toID)
 	}
 
 	oldTmp, err := ioutil.TempFile("", "old")
 	if err != nil {
 		return err
 	}
+	defer os.Remove(oldTmp.Name())
+	defer oldTmp.Close()
 
 	newTmp, err := ioutil.TempFile("", "new")
 	if err != nil {
 		return err
 	}
-
-	defer func() {
-		err = oldTmp.Close()
-		if err != nil {
-			logrus.Warnln(err)
-		}
-
-		err = os.Remove(oldTmp.Name())
-		if err != nil {
-			logrus.Warnln(err)
-		}
-
-		err = newTmp.Close()
-		if err != nil {
-			logrus.Warnln(err)
-		}
-
-		err = os.Remove(newTmp.Name())
-		if err != nil {
-			logrus.Warnln(err)
-		}
-	}()
+	defer os.Remove(newTmp.Name())
+	defer newTmp.Close()
 
 	// Save old img to temp file
-	err = dockerClient.SaveImage(ctx, fromID, oldTmp)
+	err = c.dockerClient.SaveImage(ctx, fromImg.ID, oldTmp)
 	if err != nil {
 		return err
 	}
@@ -108,7 +83,7 @@ func CreatePatch(fromID string, toID string, patchFile io.Writer) error {
 	}
 
 	// Save new img to temp file
-	err = dockerClient.SaveImage(ctx, toID, newTmp)
+	err = c.dockerClient.SaveImage(ctx, toImg.ID, newTmp)
 	if err != nil {
 		return err
 	}
@@ -130,28 +105,21 @@ func CreatePatch(fromID string, toID string, patchFile io.Writer) error {
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
-func PatchDockerImage(originalIdentifier string, patchFile io.ReadCloser, targetIdentifier, targetHash string) error {
-	// Setup
-	ctx := context.TODO()
-	dockerClient, err := docker_api.NewDefaultAPIClient()
-	if err != nil {
-		return err
-	}
-
-	if len(originalIdentifier) > 12 && strings.Contains(originalIdentifier, ":") {
-		originalIdentifier = strings.Split(originalIdentifier, ":")[1][0:12]
-	}
-
-	if len(targetIdentifier) > 12 && strings.Contains(targetIdentifier, ":") {
-		targetIdentifier = strings.Split(targetIdentifier, ":")[1][0:12]
-	}
+func (c *Client) PatchDockerImage(
+	ctx context.Context,
+	originalIdentifier string,
+	patchFile io.ReadCloser,
+	targetIdentifier string,
+	targetHash string,
+	) error {
 
 	defer func() {
-		if err = patchFile.Close(); err != nil {
-			logrus.Warnln(err)
+		if err := patchFile.Close(); err != nil {
+			c.logger.Warn("couldn't cleanup temporary patch file", zap.Error(err))
 		}
 	}()
 
@@ -159,27 +127,17 @@ func PatchDockerImage(originalIdentifier string, patchFile io.ReadCloser, target
 	if err != nil {
 		return err
 	}
+	defer os.Remove(srcTempFile.Name())
+	defer srcTempFile.Close()
 	log.Println("src temp file:", srcTempFile.Name())
 
-	// lookup image
-	preLoadImages, err := dockerClient.ListImages(ctx)
+	originalImg, err := c.dockerClient.LookupImage(ctx, originalIdentifier)
 	if err != nil {
 		return err
 	}
 
-	hasImg := false
-	for _, img := range preLoadImages {
-		if strings.HasPrefix(strings.Split(img.ID, ":")[1], originalIdentifier) {
-			hasImg = true
-			break
-		}
-	}
-	if !hasImg {
-		return fmt.Errorf("img %s doesn't exist", originalIdentifier)
-	}
-
 	// save image
-	err = dockerClient.SaveImage(ctx, originalIdentifier, srcTempFile)
+	err = c.dockerClient.SaveImage(ctx, originalImg.ID, srcTempFile)
 	if err != nil {
 		return err
 	}
@@ -198,14 +156,16 @@ func PatchDockerImage(originalIdentifier string, patchFile io.ReadCloser, target
 	if err != nil {
 		return err
 	}
-	logrus.Debugln("output temp file:", outputTempFile.Name())
+	defer os.Remove(outputTempFile.Name())
+	defer outputTempFile.Close()
+	c.logger.Debug("output tempfile", zap.String("filename", outputTempFile.Name()))
 
 	// apply patch
 	err = bsdiff.Patch(srcTempFile, outputTempFile, patchFile)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	logrus.Debugln("patch applied to", outputTempFile.Name())
+	c.logger.Debug("patch applied to", zap.String("filename", outputTempFile.Name()))
 
 	err = outputTempFile.Sync()
 	if err != nil {
@@ -214,53 +174,19 @@ func PatchDockerImage(originalIdentifier string, patchFile io.ReadCloser, target
 
 	_, err = outputTempFile.Seek(0, 0)
 	if err != nil {
-		log.Fatalln("Unable to seek:", err)
-	}
-
-	// verify sha sum
-	// TODO(isaac) Should verification happen? Might be superfluous
-	outputShaSum, _ := utils.CalculateFileSha256Sum(outputTempFile.Name())
-	logrus.Debugln("New image SHA sum:", outputShaSum)
-	// TODO: Compare against a known good value. This would prevent (or even attempting) loading a malformed image
-
-	// remove original tar
-	err = os.Remove(srcTempFile.Name())
-	if err != nil {
-		logrus.Warnf("unable to cleanup temporary file: %+v", err)
+		return err
 	}
 
 	// load image
-	err = dockerClient.LoadImage(ctx, outputTempFile)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	// remove output tar
-	err = os.Remove(outputTempFile.Name())
-	if err != nil {
-		logrus.Warnf("unable to cleanup temporary file: %+v", err)
-	}
-
-	// verify identifier
-	postLoadImages, err := dockerClient.ListImages(ctx)
-	if err != nil {
-		// TODO Return on err? Load may have been successful
-		logrus.Warnln(err)
-	}
-	for _, img := range postLoadImages {
-		if strings.HasPrefix(strings.Split(img.ID, ":")[1], targetIdentifier) {
-			logrus.Infof("Patch was successful. %s is now available.", targetIdentifier)
-			return nil
-		}
-	}
-	return fmt.Errorf("unable to patch %s to %s", originalIdentifier, targetIdentifier)
-}
-
-func TagImage(imgID, tag string) error {
-	ctx := context.TODO()
-	dockerClient, err := docker_api.NewDefaultAPIClient()
+	err = c.dockerClient.LoadImage(ctx, outputTempFile)
 	if err != nil {
 		return err
 	}
-	return dockerClient.TagImage(ctx, imgID, tag)
+
+	_, err = c.dockerClient.LookupImage(ctx, targetIdentifier)
+	if err != nil {
+		return fmt.Errorf("unable to generate %s: %v", targetIdentifier, err)
+	}
+
+	return nil
 }

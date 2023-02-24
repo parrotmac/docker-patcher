@@ -12,10 +12,8 @@ require (
 	github.com/icedream/go-bsdiff v1.0.0
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
-	github.com/sirupsen/logrus v1.4.1
 	go.uber.org/atomic v1.4.0 // indirect
 	go.uber.org/multierr v1.2.0 // indirect
 	go.uber.org/zap v1.11.0
-	golang.org/x/net v0.0.0-20191027233614-53de4c7853b5 // indirect
-	golang.org/x/sys v0.0.0-20191027211539-f8518d3b3627 // indirect
+	golang.org/x/net v0.7.0 // indirect
 )
